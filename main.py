@@ -17,14 +17,17 @@ source_folder_path = ""
 destination_folder_path = ""
 source_mode = tk.StringVar(value="folder")  # default
 
+# == Global Variables == 
+overwrite_all = None
+
 # === Menu Option Variables ===
 store_ready_var = tk.BooleanVar(value=False)
 pre_ticketed_var = tk.BooleanVar(value=False)
 
 # === Constants == 
-SIZES = ["XS", "S", "M", "L", "2XL", "3XL", "4XL"]
+SIZES = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"]
 
-# === Size Ratio Helper ===
+# === Helper Functions ===
 def get_size_ratio_string(carton):
     paired = [(label, qty or 0) for label, qty in zip(SIZES, carton["size_quantities"]) if qty]
     if not paired:
@@ -32,6 +35,44 @@ def get_size_ratio_string(carton):
     ratio_string = "/".join(label for label, _ in paired)
     qty_string = "/".join(str(qty) for _, qty in paired)
     return ratio_string, qty_string
+
+def confirm_overwrite_if_needed(out_path):
+    global overwrite_all
+
+    if not out_path.exists() or overwrite_all is True:
+        return True
+
+    if overwrite_all is False:
+        return False
+
+    dialog = tk.Toplevel(window)
+    dialog.title("Overwrite Confirmation")
+    tk.Label(dialog, text=f"'{out_path.name}' already exists.\nDo you want to overwrite it?").pack(padx=20, pady=10)
+
+    response = {"choice": None}
+
+    def choose(option):
+        response["choice"] = option
+        dialog.destroy()
+
+    btn_frame = tk.Frame(dialog)
+    btn_frame.pack(pady=10)
+
+    tk.Button(btn_frame, text="Yes", width=10, command=lambda: choose("yes")).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="Yes to All", width=10, command=lambda: choose("yes_all")).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="No", width=10, command=lambda: choose("no")).pack(side="left", padx=5)
+
+    dialog.grab_set()
+    window.wait_window(dialog)
+
+    if response["choice"] == "yes_all":
+        overwrite_all = True
+        return True
+    elif response["choice"] == "yes":
+        return True
+    elif response["choice"] == "no":
+        return False
+
 
 # === Event Handlers ===
 def choose_source():# Source can be one file or a folder
@@ -200,6 +241,10 @@ def generate_template1_labels():
             
         label_wb.remove(template)
         out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
+
+        if not confirm_overwrite_if_needed(out_path):
+            print("Skipped:", out_path.name)
+            continue
         label_wb.save(out_path)
         print("Saved label to:", out_path)
 
@@ -261,6 +306,10 @@ def generate_template2_labels():
             
         label_wb.remove(template)
         out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
+        
+        if not confirm_overwrite_if_needed(out_path):
+            print("Skipped:", out_path.name)
+            continue
         label_wb.save(out_path)
         print("Saved label to:", out_path)
 
