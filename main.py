@@ -1,6 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog
-from tkinter import messagebox
+from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 import openpyxl
 import re
@@ -16,6 +15,7 @@ base_path = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Pa
 source_folder_path = ""
 destination_folder_path = ""
 source_mode = tk.StringVar(value="folder")  # default
+template_var = tk.StringVar(value="Select Template")
 
 # == Global Variables == 
 overwrite_all = None
@@ -113,6 +113,7 @@ def parse_packing_header(ws):
         "ship_to_address_line1": ws["B5"].value,
         "ship_to_address_line2": ws["B6"].value,
         "ship_to_address_line3": ws["B7"].value,
+        "ship_to_address_line4": ws["B8"].value,
 
         "shipper_address_line1": ws["L5"].value,
         "shipper_address_line2": ws["L6"].value,
@@ -185,10 +186,26 @@ def parse_packing_list(ws, start_row=17):
         cartons.append(carton)
     return cartons
 
+def generate_labels():
+    global overwrite_all
+    overwrite_all = None
+
+    selected = template_var.get()
+    if selected == "Template 1":
+        generate_template1_labels()
+    elif selected == "Template 2":
+        generate_template2_labels()
+    # elif selected == "Template 3":
+    #     generate_template3_labels()
+    else:
+        messagebox.showwarning("No Template Selected", "Please choose a template.")
+
+
+
 # Label templates
 def generate_template1_labels():
-    if not destination_folder_path:
-        messagebox.showerror("Destination Not Set", "Please select a destination folder before generating labels.")
+    if not destination_folder_path or not destination_folder_path:
+        messagebox.showerror("Missing Paths", "Please select both source and destination paths.")
         return
 
     print("Running Template 1 label logic...")
@@ -226,6 +243,11 @@ def generate_template1_labels():
             # TODO: Manually map carton + header values to template cells
             ratio, qtys = get_size_ratio_string(carton)
 
+            new_sheet["G4"] = header["ship_to_address_line1"]
+            new_sheet["G5"] = header["ship_to_address_line2"]
+            new_sheet["G6"] = header["ship_to_address_line3"]
+            new_sheet["G7"] = header["ship_to_address_line4"]
+
             new_sheet["C4"] = header["shipper_address_line1"]
             new_sheet["C5"] = f'{header["shipper_address_line2"]}, {header["shipper_address_line3"]}'
             new_sheet["C7"] = header["po_box"]
@@ -250,8 +272,8 @@ def generate_template1_labels():
 
 
 def generate_template2_labels():
-    if not destination_folder_path:
-        messagebox.showerror("Destination Not Set", "Please select a destination folder before generating labels.")
+    if not destination_folder_path or not destination_folder_path:
+        messagebox.showerror("Missing Paths", "Please select both source and destination paths.")
         return
 
     print("Running Template 2 label logic...")
@@ -306,7 +328,7 @@ def generate_template2_labels():
             
         label_wb.remove(template)
         out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
-        
+
         if not confirm_overwrite_if_needed(out_path):
             print("Skipped:", out_path.name)
             continue
@@ -324,13 +346,17 @@ tk.Button(window, text="Select Destination Folder", command=choose_destination_f
 destination_label = tk.Label(window, text="No destination folder selected")
 destination_label.pack()
 
+# === Template Selection ===
+tk.Label(window, text="Choose Template:").pack(pady=(15, 2))
+template_dropdown = ttk.Combobox(window, textvariable=template_var, values=["Template 1", "Template 2"], state="readonly") #Template 3 add soon
+template_dropdown.pack(pady=2)
+
 # === Menu Options ===
 tk.Checkbutton(window, text="Store Ready", variable=store_ready_var, onvalue=True, offvalue=False).pack()
 tk.Checkbutton(window, text="Pre-Ticketed", variable=pre_ticketed_var, onvalue=True, offvalue=False).pack()
 
-# === Template Buttons ===
-tk.Button(window, text="Generate Template 1 Labels", command=generate_template1_labels).pack(pady=(30, 5))
-tk.Button(window, text="Generate Template 2 Labels", command=generate_template2_labels).pack(pady=5)
+tk.Button(window, text="Generate Labels", command=generate_labels).pack(pady=(30, 5))
+
 
 # === Start GUI ===
 window.mainloop()
