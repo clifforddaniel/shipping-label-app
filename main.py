@@ -313,9 +313,6 @@ def generate_template2_labels():
         print("Carton data: ", cartons)
 
 
-        # === Output to label template (stub for now) ===
-        store_ready = "Yes" if store_ready_var.get() else "No"
-        pre_ticketed = "Yes" if pre_ticketed_var.get() else "No"
         for i, carton in enumerate(cartons, start=1):
             print(f"Carton {i} of {len(cartons)}")
             
@@ -331,7 +328,7 @@ def generate_template2_labels():
             new_sheet["D8"] = header["ship_to_address_line2"]
             new_sheet["D9"] = header["ship_to_address_line3"]
             new_sheet["D11"] = header["po_box"]
-            #new_sheet["E12"] = header["dept_num"] \
+            #new_sheet["E12"] = header["dept_num"]
             new_sheet["E13"] = carton["vendor_style"]
             new_sheet["E14"] = carton["description"]
             new_sheet["E15"] = ratio
