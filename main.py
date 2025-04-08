@@ -36,9 +36,14 @@ def get_size_ratio_string(carton):
     paired = [(label, qty or 0) for label, qty in zip(SIZES, carton["size_quantities"]) if qty]
     if not paired:
         return ("", "")
-    ratio_string = "/".join(label for label, _ in paired)
-    qty_string = "/".join(str(qty) for _, qty in paired)
-    return ratio_string, qty_string
+    
+    if template_var.get() == "Template 2":
+        ratio_string = ", ".join(f"{label} ({qty})" for label, qty in paired)
+        return (ratio_string, "")  # qty string not needed in this format
+    else:
+        ratio_string = "/".join(label for label, _ in paired)
+        qty_string = "/".join(str(qty) for _, qty in paired)
+        return ratio_string, qty_string
 
 def is_valid_path(src, dest):
     if not dest or not src:
@@ -181,7 +186,8 @@ def parse_packing_list(ws, start_row=17):
     cartons = []
 
     for row in ws.iter_rows(min_row=start_row, values_only=True):
-        # Stop parsing when rows are clearly empty
+        # Stop parsing when rows are empty except columns D and F (which sometimes are filled in otherwise empty rows)
+        non_empty = [cell for idx, cell in enumerate(row[:6]) if idx not in (3, 5)]
         if all(cell is None for cell in row[:6]):
             break
 
@@ -284,6 +290,8 @@ def generate_template1_labels():
         label_wb.save(out_path)
         print("Saved label to:", out_path)
 
+    messagebox.showinfo("Done", f"All labels successfully generated and saved to: \n\n{destination_folder_path}")
+
 
 def generate_template2_labels():
     if not is_valid_path(source_folder_path, destination_folder_path):
@@ -344,6 +352,7 @@ def generate_template2_labels():
             continue
         label_wb.save(out_path)
         print("Saved label to:", out_path)
+    messagebox.showinfo("Done", f"All labels successfully generated and saved to: \n\n{destination_folder_path}")
 
 def generate_template3_labels():
     if not is_valid_path(source_folder_path, destination_folder_path):
@@ -411,6 +420,7 @@ def generate_template3_labels():
 
         label_wb.save(out_path)
         print("Saved label to:", out_path)
+    messagebox.showinfo("Done", f"All labels successfully generated and saved to: \n\n{destination_folder_path}")
 
 def on_template_change(event):
     template1_frame.pack_forget()
