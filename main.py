@@ -4,12 +4,16 @@ from pathlib import Path
 import openpyxl
 import re
 import sys
+from collections import defaultdict
 
-# === GUI Setup (initialize before any tk variables) ===
+
+# === GUI Setup ===
 window = tk.Tk()
 window.title("Shipping Label Generator")
 
-# === Storage for paths ===
+
+
+# === Paths and State Variables ===
 base_path = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
 
 source_folder_path = ""
@@ -17,16 +21,19 @@ destination_folder_path = ""
 source_mode = tk.StringVar(value="folder")  # default
 
 
-# == Global Variables == 
-overwrite_all = None
+# === Template and UI Variables ===
 template_var = tk.StringVar(value="Select Template")
 template1_color_var = tk.StringVar()
 template3_color_var = tk.StringVar()
-template3_style_var = tk.StringVar() 
-
-# === Menu Option Variables ===
+template3_style_var = tk.StringVar()
+overwrite_all = None
 store_ready_var = tk.BooleanVar(value=False)
 pre_ticketed_var = tk.BooleanVar(value=False)
+auto_style_var = tk.BooleanVar()
+
+# === Dynamic Style Metadata Storage ===
+style_metadata = {}
+style_fields = {}
 
 # === Constants == 
 SIZES = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"]
@@ -92,8 +99,62 @@ def confirm_overwrite_if_needed(out_path):
     elif response["choice"] == "no":
         return False
 
+def get_input_files(source_path):
+    source = Path(source_path)
+    if source.is_file():
+        return [source]  # Just one file
+    elif source.is_dir():
+        return list(source.glob("*.xlsx"))  # All Excel files in folder
+    else:
+        return []
+    
+def collect_unique_styles():
+    if not source_folder_path:
+        return {}
 
-# === Event Handlers ===
+    from openpyxl import load_workbook
+    path = Path(source_folder_path)
+    if not path.exists():
+        return {}
+
+    file_list = [path] if path.is_file() else list(path.glob("*.xlsx"))
+    styles_by_file = {}
+
+    for file in file_list:
+        filename = file.name
+        wb = load_workbook(file, read_only=True, data_only=True)
+        ws = wb.active
+
+        for row in ws.iter_rows(min_row=17, values_only=True):
+            non_empty = [cell for idx, cell in enumerate(row[:6]) if idx not in (3, 5)]
+            if all(cell is None for cell in non_empty):
+                break
+
+            style, desc = row[8], row[9]
+            if style and desc:
+                styles_by_file.setdefault(filename, set()).add((style, desc))
+
+    # Convert sets to sorted lists for display
+    return {file: sorted(styles) for file, styles in styles_by_file.items()}
+
+
+
+def sync_style_metadata():
+    if auto_style_var.get():
+        for key, fields in style_fields.items():
+            style_metadata[key] = {k: v.get().strip() for k, v in fields.items()}
+
+def update_auto_style_visibility():
+    valid_paths = bool(source_folder_path) and bool(destination_folder_path)
+    selected_template = template_var.get() in ["Template 1", "Template 3"]
+
+    if valid_paths and selected_template:
+        auto_style_frame.pack(pady=(5, 0))
+    else:
+        auto_style_frame.pack_forget()
+
+
+# === Path selection ===
 def choose_source():# Source can be one file or a folder
     global source_folder_path
     if source_mode.get() == "file":
@@ -104,23 +165,17 @@ def choose_source():# Source can be one file or a folder
     source_folder_path = path
     print("Source:", source_folder_path)
     source_label.config(text=source_folder_path)
-
-
-def get_input_files(source_path):
-    source = Path(source_path)
-    if source.is_file():
-        return [source]  # Just one file
-    elif source.is_dir():
-        return list(source.glob("*.xlsx"))  # All Excel files in folder
-    else:
-        return []
+    update_auto_style_visibility()
 
 def choose_destination_folder():
     global destination_folder_path
     destination_folder_path = filedialog.askdirectory()
     print("Destination folder:", destination_folder_path)
     destination_label.config(text=destination_folder_path)
+    update_auto_style_visibility()
 
+
+# === Parsing Logic ===
 def parse_packing_header(ws):
 
     """
@@ -206,6 +261,8 @@ def parse_packing_list(ws, start_row=17):
         cartons.append(carton)
     return cartons
 
+
+# === Label Generation Functions === 
 def generate_labels():
     global overwrite_all
     overwrite_all = None
@@ -220,8 +277,6 @@ def generate_labels():
     else:
         messagebox.showwarning("No Template Selected", "Please choose a template.")
 
-
-
 # Label templates
 def generate_template1_labels():
     if not is_valid_path(source_folder_path, destination_folder_path):
@@ -230,6 +285,10 @@ def generate_template1_labels():
     print("Running Template 1 label logic...")
     print("From:", source_folder_path)
     print("To:", destination_folder_path)
+
+    # Grab user inputs
+    sync_style_metadata()
+
     for file in get_input_files(source_folder_path): # Loop xlsx files in destination folder
         print("Processing ", file.name)
     
@@ -256,6 +315,11 @@ def generate_template1_labels():
         pre_ticketed = "Yes" if pre_ticketed_var.get() else "No"
         for i, carton in enumerate(cartons, start=1):
             print(f"Carton {i} of {len(cartons)}")
+
+            key = (file.name, carton["vendor_style"], carton["description"])
+            meta = style_metadata.get(key)
+            color = meta["color"] if meta else template1_color_var.get().strip()
+
             
             new_sheet = label_wb.copy_worksheet(template)
             new_sheet.title = f"Carton {i}"
@@ -273,7 +337,7 @@ def generate_template1_labels():
             new_sheet["E11"] = ratio 
             new_sheet["E12"] = qtys
             new_sheet["B11"] = f'{carton["description"]} # {carton["vendor_style"]}'
-            new_sheet["G11"] = template1_color_var.get().strip()
+            new_sheet["G11"] = color
             new_sheet["I11"] = carton["total_units"]
             new_sheet["C14"] = store_ready
             new_sheet["C15"] = pre_ticketed
@@ -292,7 +356,6 @@ def generate_template1_labels():
 
     messagebox.showinfo("Done", f"All labels successfully generated and saved to: \n\n{destination_folder_path}")
 
-
 def generate_template2_labels():
     if not is_valid_path(source_folder_path, destination_folder_path):
         return
@@ -300,6 +363,10 @@ def generate_template2_labels():
     print("Running Template 2 label logic...")
     print("From:", source_folder_path)
     print("To:", destination_folder_path)
+
+    # Grab user inputs
+    sync_style_metadata()
+
     for file in get_input_files(source_folder_path): # Loop xlsx files in destination folder
         print("Processing ", file.name)
     
@@ -358,12 +425,14 @@ def generate_template3_labels():
     if not is_valid_path(source_folder_path, destination_folder_path):
         return
 
-    color = template3_color_var.get().strip()
-    style = template3_style_var.get().strip()
 
     print("Running Template 3 label logic...")
     print("From:", source_folder_path)
     print("To:", destination_folder_path)
+
+    # Grab user inputs
+    sync_style_metadata()
+
     for file in get_input_files(source_folder_path): # Loop xlsx files in destination folder
         print("Processing ", file.name)
 
@@ -387,6 +456,12 @@ def generate_template3_labels():
 
         for i, carton in enumerate(cartons, start=1):
             print(f"Carton {i} of {len(cartons)}")
+
+            key = (file.name, carton["vendor_style"], carton["description"])
+            meta = style_metadata.get(key)
+            color = meta["color"] if meta else template3_color_var.get().strip()
+
+            style = meta["template3_style"] if meta else template3_style_var.get().strip()
 
             new_sheet = label_wb.copy_worksheet(template)
             new_sheet.title = f"Carton {i}"
@@ -422,14 +497,7 @@ def generate_template3_labels():
         print("Saved label to:", out_path)
     messagebox.showinfo("Done", f"All labels successfully generated and saved to: \n\n{destination_folder_path}")
 
-def on_template_change(event):
-    template1_frame.pack_forget()
-    template3_frame.pack_forget()
-    selected = template_var.get()
-    if selected == "Template 1":
-        template1_frame.pack(pady=(10, 5))
-    elif selected == "Template 3":
-        template3_frame.pack(pady=(10, 5))
+# ============ UI CREATION ===============
 
 # === Folder Selection ===
 tk.Checkbutton(window, text="Select single file instead", variable=source_mode, onvalue="file", offvalue="folder").pack()
@@ -440,6 +508,78 @@ source_label.pack()
 tk.Button(window, text="Select Destination Folder", command=choose_destination_folder).pack(pady=(20, 5))
 destination_label = tk.Label(window, text="No destination folder selected")
 destination_label.pack(pady=2)
+
+# === Dynamic UI Frame for Styles ===
+style_metadata = {}
+style_fields = {}  # To track text input widgets per (style, desc)
+auto_style_var = tk.BooleanVar()
+
+def on_auto_style_toggle():
+    update_style_fields()
+    toggle_template_inputs()
+
+
+def on_template_change(event):
+    template1_frame.pack_forget()
+    template3_frame.pack_forget()
+    update_style_fields()
+    selected = template_var.get()
+    if selected == "Template 1":
+        template1_frame.pack(pady=(10, 5))
+    elif selected == "Template 3":
+        template3_frame.pack(pady=(10, 5))
+    update_auto_style_visibility()
+
+def update_style_fields():
+    for widget in style_inner_frame.winfo_children():
+        widget.destroy()
+    style_metadata.clear()
+    style_fields.clear()
+
+    if not auto_style_var.get():
+        style_frame.pack_forget()
+        return
+
+    grouped_styles = collect_unique_styles()
+    current_template = template_var.get()
+
+    for filename, style_list in grouped_styles.items():
+        # Section label per file
+        tk.Label(style_inner_frame, text=f"📦 File: {filename}", font=("Arial", 10, "bold")).pack(anchor="w", pady=(10, 2))
+
+        for i, (style, desc) in enumerate(style_list, 1):
+            tk.Label(style_inner_frame, text=f"{i}. {style} — {desc}").pack(anchor="w", pady=(5, 0))
+
+            entry_row = {}
+
+            color_var = tk.StringVar()
+            tk.Label(style_inner_frame, text="Color:").pack(anchor="w")
+            tk.Entry(style_inner_frame, textvariable=color_var).pack(fill="x")
+            entry_row["color"] = color_var
+
+            if current_template == "Template 3":
+                template3_var = tk.StringVar()
+                tk.Label(style_inner_frame, text="Style:").pack(anchor="w")
+                tk.Entry(style_inner_frame, textvariable=template3_var).pack(fill="x")
+                entry_row["template3_style"] = template3_var
+
+            # 🔑 Now use (filename, style, desc) as the key
+            style_fields[(filename, style, desc)] = entry_row
+
+    style_frame.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+
+def toggle_template_inputs():
+    is_auto = auto_style_var.get()
+
+    # Hide/show inputs in Template 1
+    for widget in template1_frame.winfo_children():
+        if isinstance(widget, tk.Entry) or (isinstance(widget, tk.Label) and "Color" in widget.cget("text")):
+            widget.pack_forget() if is_auto else widget.pack(fill="x", pady=(0, 10))
+
+    # Hide/show inputs in Template 3
+    for widget in template3_frame.winfo_children():
+        if isinstance(widget, tk.Entry) or (isinstance(widget, tk.Label) and ("Color" in widget.cget("text") or "Style" in widget.cget("text"))):
+            widget.pack_forget() if is_auto else widget.pack(fill="x", pady=(0, 10))
 
 # === Template Selection ===
 tk.Label(window, text="Choose Template:").pack(pady=(15, 2))
@@ -465,8 +605,45 @@ template3_frame.pack_forget()
 
 template_dropdown.bind("<<ComboboxSelected>>", on_template_change)
 
+# Checkmark for multiple style inputs
+auto_style_frame = tk.Frame(window)
+auto_style_checkbox = tk.Checkbutton(auto_style_frame, text="Input multiple styles", variable=auto_style_var, command=on_auto_style_toggle)
+auto_style_checkbox.pack()
+auto_style_frame.pack_forget() # hide initially
+
 tk.Button(window, text="Generate Labels", command=generate_labels).pack(pady=(30, 5))
 
+
+
+style_frame = tk.LabelFrame(window, text="Product Field Overrides")
+style_canvas = tk.Canvas(style_frame, height=200)
+scrollbar = tk.Scrollbar(style_frame, orient="vertical", command=style_canvas.yview)
+style_inner_frame = tk.Frame(style_canvas)
+style_inner_frame.bind(
+    "<Configure>", lambda e: style_canvas.configure(scrollregion=style_canvas.bbox("all"))
+)
+style_window_id = style_canvas.create_window((0, 0), window=style_inner_frame, anchor="nw")
+style_canvas.configure(yscrollcommand=scrollbar.set)
+style_canvas.pack(side="left", fill="both", expand=True)
+scrollbar.pack(side="right", fill="y")
+style_frame.pack_forget()  # Hide until activated
+
+
+
+def bind_mousewheel(widget, canvas):
+    def _on_mousewheel(event):
+        canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
+    widget.bind_all("<MouseWheel>", _on_mousewheel)  # For Windows
+    widget.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))  # For Linux
+    widget.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))   # For Linux
+
+def resize_inner_frame(event):
+    canvas_width = event.width
+    style_canvas.itemconfig(style_window_id, width=canvas_width)
+
+bind_mousewheel(style_inner_frame, style_canvas)
+style_canvas.bind("<Configure>", resize_inner_frame)
 
 
 # === Start GUI ===
