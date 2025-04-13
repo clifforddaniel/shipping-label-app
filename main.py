@@ -289,7 +289,18 @@ def generate_template1_labels():
     # Grab user inputs
     sync_style_metadata()
 
+    saved_count = 0
     for file in get_input_files(source_folder_path): # Loop xlsx files in destination folder
+        if file.name.startswith("~$"):
+            print("Skipping temporary file:", file.name) #Skip temporary files created by Excel
+            continue
+
+        out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
+
+        if not confirm_overwrite_if_needed(out_path):
+            print("Skipped:", out_path.name)
+            continue
+        
         print("Processing ", file.name)
     
         # Load input packing list
@@ -342,19 +353,18 @@ def generate_template1_labels():
             new_sheet["C14"] = store_ready
             new_sheet["C15"] = pre_ticketed
             new_sheet["H14"] = f'{i} of {len(cartons)}'
-
-
             
         label_wb.remove(template)
-        out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
 
-        if not confirm_overwrite_if_needed(out_path):
-            print("Skipped:", out_path.name)
-            continue
         label_wb.save(out_path)
+        saved_count += 1
         print("Saved label to:", out_path)
 
-    messagebox.showinfo("Done", f"All labels successfully generated and saved to: \n\n{destination_folder_path}")
+    if saved_count > 0:
+        messagebox.showinfo("Done", f"{saved_count} label file(s) saved to:\n\n{destination_folder_path}")
+    else:
+        messagebox.showinfo("No Files Saved", "No labels were generated due to overwrite selections or errors.")
+
 
 def generate_template2_labels():
     if not is_valid_path(source_folder_path, destination_folder_path):
@@ -367,7 +377,18 @@ def generate_template2_labels():
     # Grab user inputs
     sync_style_metadata()
 
+    saved_count = 0
     for file in get_input_files(source_folder_path): # Loop xlsx files in destination folder
+        if file.name.startswith("~$"):
+            print("Skipping temporary file:", file.name) #Skip temporary files created by Excel
+            continue
+
+        out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
+
+        if not confirm_overwrite_if_needed(out_path):
+            print("Skipped:", out_path.name)
+            continue
+
         print("Processing ", file.name)
     
         # Load input packing list
@@ -412,14 +433,16 @@ def generate_template2_labels():
             new_sheet["E18"] = len(cartons)
             
         label_wb.remove(template)
-        out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
 
-        if not confirm_overwrite_if_needed(out_path):
-            print("Skipped:", out_path.name)
-            continue
         label_wb.save(out_path)
+        saved_count += 1
         print("Saved label to:", out_path)
-    messagebox.showinfo("Done", f"All labels successfully generated and saved to: \n\n{destination_folder_path}")
+
+    if saved_count > 0:
+        messagebox.showinfo("Done", f"{saved_count} label file(s) saved to:\n\n{destination_folder_path}")
+    else:
+        messagebox.showinfo("No Files Saved", "No labels were generated due to overwrite selections or errors.")
+
 
 def generate_template3_labels():
     if not is_valid_path(source_folder_path, destination_folder_path):
@@ -433,7 +456,18 @@ def generate_template3_labels():
     # Grab user inputs
     sync_style_metadata()
 
+    saved_count = 0
     for file in get_input_files(source_folder_path): # Loop xlsx files in destination folder
+        if file.name.startswith("~$"):
+            print("Skipping temporary file:", file.name) #Skip temporary files created by Excel
+            continue
+
+        out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
+
+        if not confirm_overwrite_if_needed(out_path):
+            print("Skipped:", out_path.name)
+            continue
+
         print("Processing ", file.name)
 
         source_wb = openpyxl.load_workbook(file, read_only=True, data_only=True)
@@ -488,14 +522,16 @@ def generate_template3_labels():
             new_sheet["F15"] = len(cartons)
 
         label_wb.remove(template)
-        out_path = Path(destination_folder_path) / f"{file.stem}-LABELS.xlsx"
-        if not confirm_overwrite_if_needed(out_path):
-            print("Skipped:", out_path.name)
-            continue
 
         label_wb.save(out_path)
+        saved_count += 1
         print("Saved label to:", out_path)
-    messagebox.showinfo("Done", f"All labels successfully generated and saved to: \n\n{destination_folder_path}")
+
+    if saved_count > 0:
+        messagebox.showinfo("Done", f"{saved_count} label file(s) saved to:\n\n{destination_folder_path}")
+    else:
+        messagebox.showinfo("No Files Saved", "No labels were generated due to overwrite selections or errors.")
+
 
 # ============ UI CREATION ===============
 
